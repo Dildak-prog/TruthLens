@@ -2,6 +2,8 @@ package com.truthlens.app
 
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -38,7 +40,11 @@ private fun TruthLensScreen() {
     var resultText by remember { mutableStateOf("Выбери изображение, чтобы начать проверку.") }
     var details by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { selectedUri = it; resultText = "Изображение выбрано. Нажми «Проверить»."; details = "" }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
+        selectedUri = it
+        resultText = "Изображение выбрано. Нажми «Проверить»."
+        details = ""
+    }
 
     MaterialTheme(colorScheme = darkColorScheme()) {
         Scaffold { padding ->
@@ -70,9 +76,9 @@ private fun TruthLensScreen() {
                                         .build()
                                     val request = Request.Builder().url(BuildConfig.API_BASE_URL.trimEnd('/') + "/analyze").post(body).build()
                                     val response = OkHttpClient().newCall(request).execute()
-                                    val text = response.body?.string().orEmpty()
-                                    if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $text")
-                                    val json = JSONObject(text)
+                                    val responseText = response.body?.string().orEmpty()
+                                    if (!response.isSuccessful) throw Exception("HTTP ${response.code}: $responseText")
+                                    val json = JSONObject(responseText)
                                     val verdict = json.optString("verdict", "unknown")
                                     val confidence = json.optDouble("confidence", 0.0)
                                     val label = when (verdict) {
@@ -81,9 +87,17 @@ private fun TruthLensScreen() {
                                         else -> "Недостаточно данных для вывода"
                                     }
                                     val extra = "Оценка модели: ${"%.1f".format(confidence * 100)}%\nМодель: ${json.optString("model", "не указана")}\n\nЭто вероятностная оценка, а не доказательство."
-                                    runOnUiThreadSafe { resultText = label; details = extra; busy = false }
+                                    Handler(Looper.getMainLooper()).post {
+                                        resultText = label
+                                        details = extra
+                                        busy = false
+                                    }
                                 } catch (e: Exception) {
-                                    runOnUiThreadSafe { resultText = "Не удалось выполнить проверку"; details = e.message ?: "Ошибка соединения"; busy = false }
+                                    Handler(Looper.getMainLooper()).post {
+                                        resultText = "Не удалось выполнить проверку"
+                                        details = e.message ?: "Ошибка соединения"
+                                        busy = false
+                                    }
                                 }
                             }
                         }
@@ -103,5 +117,3 @@ private fun TruthLensScreen() {
         }
     }
 }
-
-private fun MainActivity.runOnUiThreadSafe(action: () -> Unit) = runOnUiThread(action)
