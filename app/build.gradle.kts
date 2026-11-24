@@ -14,7 +14,7 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "1.1"
-        val apiUrl = providers.gradleProperty("API_BASE_URL").orElse("https://YOUR-SERVER-URL").get()
+        val apiUrl = providers.gradleProperty("API_BASE_URL").orElse("https://dildak-prog-truthlens-ai.hf.space").get()
         buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
     }
 
