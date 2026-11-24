@@ -1,0 +1,6 @@
+gradio>=6.0.0,<7.0.0
+spaces>=0.40.0
+sentence-transformers[image]>=5.0.0
+huggingface_hub>=0.27.0
+Pillow>=11.0.0
+python-multipart>=0.0.20
