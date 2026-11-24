@@ -12,9 +12,10 @@ android {
         applicationId = "com.truthlens.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
-        buildConfigField("String", "API_BASE_URL", "\"https://YOUR-SERVER-URL\"")
+        versionCode = 2
+        versionName = "1.1"
+        val apiUrl = providers.gradleProperty("API_BASE_URL").orElse("https://YOUR-SERVER-URL").get()
+        buildConfigField("String", "API_BASE_URL", "\"$apiUrl\"")
     }
 
     buildFeatures { compose = true; buildConfig = true }
