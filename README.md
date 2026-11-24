@@ -1,30 +1,20 @@
 ---
-title: TruthLens API
+title: TruthLens AI Detector
 emoji: 🔎
 colorFrom: blue
 colorTo: purple
-sdk: docker
-app_port: 7860
+sdk: gradio
+app_file: app.py
 pinned: false
+models:
+  - abacusai/Smaug-AI-Image-Detector
 ---
 
-# TruthLens API
+# TruthLens
 
-FastAPI backend for the TruthLens Android app. Runs the open-source
-`abacusai/Smaug-AI-Image-Detector` model locally in the Space container.
-No Hugging Face Inference Providers token or paid inference credits are used.
+Free-tier Gradio + ZeroGPU deployment of the open-source Smaug AI image detector.
+The Android client calls `POST /analyze` with multipart field `file`.
 
-The first startup downloads approximately 0.9 GB of model files and can take
-several minutes. On free CPU hardware inference may be slow, and free Spaces
-can sleep when inactive. The model is loaded at startup; check `/health`.
-
-## API
-- `GET /health`
-- `POST /analyze` with multipart field `file`
-
-The model returns an AI-generated probability in [0, 1]. The response also
-includes basic mathematical image statistics. Scores are probabilistic, not proof.
-
-## Hardware
-CPU Basic may work but startup time and inference speed depend on the free
-hardware currently allocated by Hugging Face. No paid hardware is requested.
+The first inference downloads the model and may take a while. ZeroGPU has daily
+usage quotas; availability and speed depend on Hugging Face's free-tier limits.
+Scores are probabilistic and must not be treated as proof.
