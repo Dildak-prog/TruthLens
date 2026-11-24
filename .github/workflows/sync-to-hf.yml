@@ -7,12 +7,14 @@ on:
 
 jobs:
   sync:
-    if: ${{ vars.ENABLE_HF_SYNC == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Sync files to Hugging Face
+        if: env.HF_TOKEN != ''
         uses: huggingface/hub-sync@v0.3.0
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         with:
           github_repo_id: ${{ github.repository }}
           huggingface_repo_id: Dildak-prog/truthlens-ai
