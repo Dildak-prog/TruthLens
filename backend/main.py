@@ -1,19 +1,52 @@
 import io
 import os
-import requests
-from PIL import Image, ImageStat
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import sys
+import tempfile
+from pathlib import Path
 
-app = FastAPI(title="TruthLens API", version="1.0.0")
-HF_TOKEN = os.getenv("HF_TOKEN", "")
-HF_MODEL_ID = os.getenv("HF_MODEL_ID", "")
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from PIL import Image, ImageStat
+from huggingface_hub import snapshot_download
+
+app = FastAPI(title="TruthLens API", version="2.0.0")
+MODEL_ID = os.getenv("HF_MODEL_ID", "abacusai/Smaug-AI-Image-Detector")
+detector = None
+model_error = None
+
+
+@app.on_event("startup")
+def load_model():
+    global detector, model_error
+    try:
+        model_path = snapshot_download(MODEL_ID)
+        sys.path.insert(0, model_path)
+        from smaug_image_detect import SmaugImageDetect
+        detector = SmaugImageDetect.from_pretrained(model_path)
+        model_error = None
+    except Exception as exc:
+        model_error = f"{type(exc).__name__}: {exc}"
+        print(f"TruthLens model load failed: {model_error}", flush=True)
+
+
+@app.get("/")
+def root():
+    return {"service": "TruthLens API", "model": MODEL_ID}
+
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model_configured": bool(HF_TOKEN and HF_MODEL_ID)}
+    return {
+        "status": "ok" if detector is not None else "starting_or_model_error",
+        "model": MODEL_ID,
+        "model_loaded": detector is not None,
+        "error": model_error,
+    }
+
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
+    if detector is None:
+        raise HTTPException(status_code=503, detail="AI model is not ready. Check /health.")
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Upload an image file.")
     raw = await file.read()
@@ -23,6 +56,7 @@ async def analyze(file: UploadFile = File(...)):
         image = Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image.")
+
     stats = ImageStat.Stat(image.resize((128, 128)))
     math_features = {
         "mean_rgb": [round(x, 2) for x in stats.mean],
@@ -31,46 +65,26 @@ async def analyze(file: UploadFile = File(...)):
         "height": image.height,
     }
 
-    if not HF_TOKEN or not HF_MODEL_ID:
-        return {
-            "verdict": "unknown",
-            "confidence": 0.0,
-            "model": "not-configured",
-            "message": "A model and Hugging Face token must be configured on the server.",
-            "math_features": math_features,
-        }
-
-    url = f"https://router.huggingface.co/hf-inference/models/{HF_MODEL_ID}"
+    suffix = ".jpg"
     try:
-        response = requests.post(
-            url,
-            headers={"Authorization": f"Bearer {HF_TOKEN}", "Content-Type": "image/jpeg"},
-            data=raw,
-            timeout=90,
-        )
-        response.raise_for_status()
-        payload = response.json()
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"Model provider error: {exc}")
-    except ValueError:
-        raise HTTPException(status_code=502, detail="Model returned an unreadable response.")
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            temp_path = tmp.name
+            image.save(temp_path, format="JPEG", quality=95)
+        score = float(detector(temp_path))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Model inference failed: {type(exc).__name__}: {exc}")
+    finally:
+        if "temp_path" in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
 
-    if not isinstance(payload, list) or not payload:
-        raise HTTPException(status_code=502, detail=f"Unexpected model response: {payload}")
-    best = max(payload, key=lambda item: float(item.get("score", 0)))
-    label = str(best.get("label", "")).lower()
-    score = float(best.get("score", 0))
-    if any(word in label for word in ("artificial", "generated", "ai", "fake", "synthetic")):
-        verdict = "ai"
-    elif any(word in label for word in ("real", "human", "photo", "authentic")):
-        verdict = "real"
-    else:
-        verdict = "unknown"
+    score = max(0.0, min(1.0, score))
+    verdict = "ai" if score >= 0.5 else "real"
+    confidence = score if verdict == "ai" else 1.0 - score
     return {
         "verdict": verdict,
-        "confidence": score,
-        "model": HF_MODEL_ID,
-        "top_label": best.get("label"),
+        "confidence": round(confidence, 4),
+        "ai_probability": round(score, 4),
+        "model": MODEL_ID,
         "math_features": math_features,
-        "warning": "Model scores are probabilistic and depend on the model's training data.",
+        "warning": "Probabilistic estimate, not proof. Detector accuracy depends on image source and editing.",
     }
