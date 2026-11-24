@@ -1,0 +1,20 @@
+name: Sync TruthLens to Hugging Face Space
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  sync:
+    if: ${{ vars.ENABLE_HF_SYNC == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync files to Hugging Face
+        uses: huggingface/hub-sync@v0.3.0
+        with:
+          github_repo_id: ${{ github.repository }}
+          huggingface_repo_id: Dildak-prog/truthlens-ai
+          space_sdk: gradio
+          hf_token: ${{ secrets.HF_TOKEN }}
